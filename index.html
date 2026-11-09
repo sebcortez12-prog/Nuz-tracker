@@ -1,0 +1,219 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PokéNuzlocke Tracker</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#10141f;color:#fff;font-family:Arial,sans-serif}
+header{background:#e84150;padding:24px 16px;text-align:center}
+header h1{margin:0;font-size:26px}
+header p{margin:7px 0 0}
+main{max-width:850px;margin:auto;padding:16px}
+.card{background:#1d2636;padding:16px;border-radius:14px;margin-bottom:15px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:#293449;padding:14px;border-radius:10px;text-align:center}
+.stat strong{font-size:25px;display:block}
+input,select,button{padding:11px;border-radius:8px;border:0;margin:4px 0;font-size:14px}
+input,select{background:#101927;color:white;border:1px solid #45536a;width:100%}
+button{background:#e84150;color:white;font-weight:bold;cursor:pointer}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:15px 0}
+.tabs button{white-space:nowrap;background:#293449}
+.tabs button.active{background:#e84150}
+.pokemon{background:#293449;padding:12px;border-radius:10px;margin:9px 0;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pokemon small{color:#bdc9db}
+.actions{display:flex;gap:4px;flex-wrap:wrap}
+.actions button{padding:7px;font-size:12px}
+label{display:block;margin:10px 0}
+h2{font-size:19px}
+.hidden{display:none}
+.badges{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.badges label{background:#293449;padding:12px;border-radius:9px}
+footer{text-align:center;color:#9ba9bc;padding:20px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+<h1>⚡ PokéNuzlocke</h1>
+<p>Tu aventura, tus reglas, tu historia.</p>
+</header>
+<main>
+<section class="card">
+<label>Nombre de tu aventura
+<input id="game" placeholder="Ej. Pokémon Sacred Gold">
+</label>
+<div class="stats">
+<div class="stat"><strong id="alive">0</strong>Vivos</div>
+<div class="stat"><strong id="dead">0</strong>Bajas</div>
+<div class="stat"><strong id="count">0</strong>Encuentros</div>
+</div>
+</section>
+
+<div class="tabs">
+<button class="active" onclick="show('team',this)">Equipo</button>
+<button onclick="show('enc',this)">Encuentros</button>
+<button onclick="show('box',this)">Caja</button>
+<button onclick="show('grave',this)">Cementerio</button>
+<button onclick="show('progress',this)">Medallas</button>
+<button onclick="show('rules',this)">Reglas</button>
+</div>
+
+<section id="team" class="card">
+<h2>🎒 Tu equipo</h2>
+<div id="teamList"></div>
+</section>
+
+<section id="enc" class="card hidden">
+<h2>📍 Registrar encuentro</h2>
+<label>Zona o ruta<input id="zone" placeholder="Ruta 1"></label>
+<label>Especie Pokémon<input id="species" placeholder="Pikachu"></label>
+<label>Mote<input id="nick" placeholder="Voltio"></label>
+<label>Nivel<input id="level" type="number" min="1" max="100" placeholder="5"></label>
+<label>Tipo<input id="type" placeholder="Eléctrico"></label>
+<button onclick="add()">Registrar Pokémon</button>
+</section>
+
+<section id="box" class="card hidden">
+<h2>📦 Caja Pokémon</h2>
+<div id="boxList"></div>
+</section>
+
+<section id="grave" class="card hidden">
+<h2>☠️ Cementerio</h2>
+<div id="graveList"></div>
+</section>
+
+<section id="progress" class="card hidden">
+<h2>🏅 Medallas</h2>
+<div class="badges" id="badges"></div>
+</section>
+
+<section id="rules" class="card hidden">
+<h2>📜 Reglas clásicas</h2>
+<label><input type="checkbox" checked> Solo capturar el primer Pokémon de cada zona.</label>
+<label><input type="checkbox" checked> Si un Pokémon se debilita, se considera muerto.</label>
+<label><input type="checkbox" checked> Todos los Pokémon deben tener mote.</label>
+<p>Las reglas adicionales son opcionales y puedes acordarlas antes de comenzar.</p>
+</section>
+
+<section class="card">
+<h2>💾 Copia de seguridad</h2>
+<button onclick="exportData()">Exportar partida</button>
+<button onclick="document.getElementById('file').click()">Importar partida</button>
+<input type="file" id="file" accept=".json" hidden onchange="importData(event)">
+</section>
+</main>
+<footer>PokéNuzlocke Tracker · Proyecto personal</footer>
+
+<script>
+let data=JSON.parse(localStorage.getItem('pokeSave')||'null')||{
+game:'',pokemon:[],badges:Array(8).fill(false)
+};
+
+function save(){
+localStorage.setItem('pokeSave',JSON.stringify(data));
+render();
+}
+
+function show(id,btn){
+document.querySelectorAll('main>section').forEach(s=>{
+if(['team','enc','box','grave','progress','rules'].includes(s.id))
+s.classList.toggle('hidden',s.id!==id);
+});
+document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+btn.classList.add('active');
+}
+
+function add(){
+let zone=document.getElementById('zone').value.trim();
+let species=document.getElementById('species').value.trim();
+let nick=document.getElementById('nick').value.trim();
+let level=document.getElementById('level').value;
+let type=document.getElementById('type').value.trim();
+
+if(!zone||!species||!level){alert('Completa zona, especie y nivel');return}
+if(data.pokemon.some(p=>p.zone.toLowerCase()===zone.toLowerCase())){
+alert('Ya tienes un encuentro registrado en esta zona.');return;
+}
+
+data.pokemon.push({
+id:Date.now(),zone,species,nick:nick||species,
+level,type,status:'alive'
+});
+['zone','species','nick','level','type'].forEach(id=>document.getElementById(id).value='');
+save();
+show('team',document.querySelector('.tabs button'));
+}
+
+function change(id,status){
+let p=data.pokemon.find(p=>p.id===id);
+if(!p)return;
+p.status=status;
+save();
+}
+
+function remove(id){
+if(confirm('¿Eliminar este Pokémon definitivamente?')){
+data.pokemon=data.pokemon.filter(p=>p.id!==id);
+save();
+}
+}
+
+function card(p){
+return `<div class="pokemon">
+<div><strong>${p.nick}</strong><br>
+<small>${p.species} · Nv. ${p.level} · ${p.zone}</small>
+${p.type?'<br><small>'+p.type+'</small>':''}</div>
+<div class="actions">
+${p.status==='alive'?`<button onclick="change(${p.id},'dead')">Baja</button><button onclick="change(${p.id},'box')">Caja</button>`:''}
+${p.status==='box'?`<button onclick="change(${p.id},'alive')">Equipo</button>`:''}
+${p.status==='dead'?'<small>☠️ Baja</small>':''}
+<button onclick="remove(${p.id})">×</button>
+</div></div>`;
+}
+
+function render(){
+document.getElementById('game').value=data.game;
+let alive=data.pokemon.filter(p=>p.status==='alive');
+document.getElementById('alive').textContent=alive.length;
+document.getElementById('dead').textContent=data.pokemon.filter(p=>p.status==='dead').length;
+document.getElementById('count').textContent=data.pokemon.length;
+document.getElementById('teamList').innerHTML=alive.length?alive.map(card).join(''):'<p>Aún no tienes Pokémon en tu equipo.</p>';
+document.getElementById('boxList').innerHTML=data.pokemon.filter(p=>p.status==='box').map(card).join('')||'<p>Tu caja está vacía.</p>';
+document.getElementById('graveList').innerHTML=data.pokemon.filter(p=>p.status==='dead').map(card).join('')||'<p>¡Ninguna baja todavía!</p>';
+document.getElementById('badges').innerHTML=data.badges.map((b,i)=>`<label><input type="checkbox" ${b?'checked':''} onchange="data.badges[${i}]=this.checked;save()"> Medalla ${i+1}</label>`).join('');
+}
+
+document.getElementById('game').addEventListener('input',e=>{
+data.game=e.target.value;
+localStorage.setItem('pokeSave',JSON.stringify(data));
+});
+
+function exportData(){
+let a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+a.download='mi-nuzlocke.json';
+a.click();
+URL.revokeObjectURL(a.href);
+}
+
+function importData(e){
+let file=e.target.files[0];
+if(!file)return;
+let reader=new FileReader();
+reader.onload=()=>{
+try{
+let d=JSON.parse(reader.result);
+if(!Array.isArray(d.pokemon)||!Array.isArray(d.badges))throw Error();
+data=d;save();alert('Partida importada correctamente');
+}catch(err){alert('Archivo no válido');}
+};
+reader.readAsText(file);
+}
+
+render();
+</script>
+</body>
+</html>
