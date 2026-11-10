@@ -32,6 +32,7 @@ h2{font-size:19px}
 .badges{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .badges label{background:#293449;padding:12px;border-radius:9px}
 footer{text-align:center;color:#9ba9bc;padding:20px;font-size:12px}
+.runbar{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;margin:16px 0}.runbar button{margin:0}.runbar select{margin:0}.run-title{font-size:14px;color:#bdc9db;margin:0 0 8px}@media(max-width:520px){.runbar{grid-template-columns:1fr 1fr}.runbar select{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -40,6 +41,10 @@ footer{text-align:center;color:#9ba9bc;padding:20px;font-size:12px}
 <p>Tu aventura, tus reglas, tu historia.</p>
 </header>
 <main>
+<section class="card">
+<h2>🗂️ Mis aventuras</h2><p class="run-title">Cada partida guarda sus propios Pokémon, encuentros y medallas.</p>
+<div class="runbar"><select id="runSelect" aria-label="Seleccionar aventura" onchange="switchRun(this.value)"></select><button onclick="createRun()">＋ Nueva</button><button onclick="deleteRun()">Eliminar</button></div>
+</section>
 <section class="card">
 <label>Nombre de tu aventura
 <input id="game" placeholder="Ej. Pokémon Sacred Gold">
@@ -108,112 +113,28 @@ footer{text-align:center;color:#9ba9bc;padding:20px;font-size:12px}
 <footer>PokéNuzlocke Tracker · Proyecto personal</footer>
 
 <script>
-let data=JSON.parse(localStorage.getItem('pokeSave')||'null')||{
-game:'',pokemon:[],badges:Array(8).fill(false)
-};
-
-function save(){
-localStorage.setItem('pokeSave',JSON.stringify(data));
-render();
-}
-
-function show(id,btn){
-document.querySelectorAll('main>section').forEach(s=>{
-if(['team','enc','box','grave','progress','rules'].includes(s.id))
-s.classList.toggle('hidden',s.id!==id);
-});
-document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
-btn.classList.add('active');
-}
-
-function add(){
-let zone=document.getElementById('zone').value.trim();
-let species=document.getElementById('species').value.trim();
-let nick=document.getElementById('nick').value.trim();
-let level=document.getElementById('level').value;
-let type=document.getElementById('type').value.trim();
-
-if(!zone||!species||!level){alert('Completa zona, especie y nivel');return}
-if(data.pokemon.some(p=>p.zone.toLowerCase()===zone.toLowerCase())){
-alert('Ya tienes un encuentro registrado en esta zona.');return;
-}
-
-data.pokemon.push({
-id:Date.now(),zone,species,nick:nick||species,
-level,type,status:'alive'
-});
-['zone','species','nick','level','type'].forEach(id=>document.getElementById(id).value='');
-save();
-show('team',document.querySelector('.tabs button'));
-}
-
-function change(id,status){
-let p=data.pokemon.find(p=>p.id===id);
-if(!p)return;
-p.status=status;
-save();
-}
-
-function remove(id){
-if(confirm('¿Eliminar este Pokémon definitivamente?')){
-data.pokemon=data.pokemon.filter(p=>p.id!==id);
-save();
-}
-}
-
-function card(p){
-return `<div class="pokemon">
-<div><strong>${p.nick}</strong><br>
-<small>${p.species} · Nv. ${p.level} · ${p.zone}</small>
-${p.type?'<br><small>'+p.type+'</small>':''}</div>
-<div class="actions">
-${p.status==='alive'?`<button onclick="change(${p.id},'dead')">Baja</button><button onclick="change(${p.id},'box')">Caja</button>`:''}
-${p.status==='box'?`<button onclick="change(${p.id},'alive')">Equipo</button>`:''}
-${p.status==='dead'?'<small>☠️ Baja</small>':''}
-<button onclick="remove(${p.id})">×</button>
-</div></div>`;
-}
-
-function render(){
-document.getElementById('game').value=data.game;
-let alive=data.pokemon.filter(p=>p.status==='alive');
-document.getElementById('alive').textContent=alive.length;
-document.getElementById('dead').textContent=data.pokemon.filter(p=>p.status==='dead').length;
-document.getElementById('count').textContent=data.pokemon.length;
-document.getElementById('teamList').innerHTML=alive.length?alive.map(card).join(''):'<p>Aún no tienes Pokémon en tu equipo.</p>';
-document.getElementById('boxList').innerHTML=data.pokemon.filter(p=>p.status==='box').map(card).join('')||'<p>Tu caja está vacía.</p>';
-document.getElementById('graveList').innerHTML=data.pokemon.filter(p=>p.status==='dead').map(card).join('')||'<p>¡Ninguna baja todavía!</p>';
-document.getElementById('badges').innerHTML=data.badges.map((b,i)=>`<label><input type="checkbox" ${b?'checked':''} onchange="data.badges[${i}]=this.checked;save()"> Medalla ${i+1}</label>`).join('');
-}
-
-document.getElementById('game').addEventListener('input',e=>{
-data.game=e.target.value;
-localStorage.setItem('pokeSave',JSON.stringify(data));
-});
-
-function exportData(){
-let a=document.createElement('a');
-a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
-a.download='mi-nuzlocke.json';
-a.click();
-URL.revokeObjectURL(a.href);
-}
-
-function importData(e){
-let file=e.target.files[0];
-if(!file)return;
-let reader=new FileReader();
-reader.onload=()=>{
-try{
-let d=JSON.parse(reader.result);
-if(!Array.isArray(d.pokemon)||!Array.isArray(d.badges))throw Error();
-data=d;save();alert('Partida importada correctamente');
-}catch(err){alert('Archivo no válido');}
-};
-reader.readAsText(file);
-}
-
-render();
+const STORAGE_KEY='pokeRunsV1';
+let runs=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');
+let activeRunId='',data;
+function freshRun(name){return {id:'run-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),name:name,game:name,pokemon:[],badges:Array(8).fill(false)}}
+if(!Array.isArray(runs)||!runs.length){const old=JSON.parse(localStorage.getItem('pokeSave')||'null');const migrated=old&&Array.isArray(old.pokemon)?Object.assign({},old,{id:'run-'+Date.now(),name:old.game||'Mi primera aventura'}):freshRun('Mi primera aventura');runs=[migrated];activeRunId=migrated.id;}else{activeRunId=runs[0].id;}
+data=runs.find(r=>r.id===activeRunId)||runs[0];
+function persistRuns(){localStorage.setItem(STORAGE_KEY,JSON.stringify(runs));}
+function save(){const i=runs.findIndex(r=>r.id===data.id);if(i>=0)runs[i]=data;persistRuns();render();}
+function switchRun(id){const selected=runs.find(r=>r.id===id);if(!selected)return;activeRunId=id;data=selected;render();}
+function createRun(){const name=prompt('Nombre de la nueva aventura (ej. Pokémon Omega Red):');if(!name||!name.trim())return;const run=freshRun(name.trim());runs.push(run);activeRunId=run.id;data=run;persistRuns();render();}
+function deleteRun(){if(runs.length===1){alert('Necesitas conservar al menos una aventura.');return;}if(!confirm('¿Eliminar esta aventura y todos sus datos?'))return;runs=runs.filter(r=>r.id!==data.id);data=runs[0];activeRunId=data.id;persistRuns();render();}
+function show(id,btn){document.querySelectorAll('main>section').forEach(s=>{if(['team','enc','box','grave','progress','rules'].includes(s.id))s.classList.toggle('hidden',s.id!==id);});document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function add(){let zone=document.getElementById('zone').value.trim(),species=document.getElementById('species').value.trim(),nick=document.getElementById('nick').value.trim(),level=document.getElementById('level').value,type=document.getElementById('type').value.trim();if(!zone||!species||!level){alert('Completa zona, especie y nivel');return;}if(data.pokemon.some(p=>p.zone.toLowerCase()===zone.toLowerCase())){alert('Ya tienes un encuentro registrado en esta zona.');return;}data.pokemon.push({id:Date.now(),zone:zone,species:species,nick:nick||species,level:level,type:type,status:'alive'});['zone','species','nick','level','type'].forEach(id=>document.getElementById(id).value='');save();show('team',document.querySelector('.tabs button'));}
+function change(id,status){let p=data.pokemon.find(p=>p.id===id);if(!p)return;p.status=status;save();}
+function remove(id){if(confirm('¿Eliminar este Pokémon definitivamente?')){data.pokemon=data.pokemon.filter(p=>p.id!==id);save();}}
+function card(p){let buttons='';if(p.status==='alive')buttons='<button onclick="change('+p.id+',\\'dead\\')">Baja</button><button onclick="change('+p.id+',\\'box\\')">Caja</button>';if(p.status==='box')buttons='<button onclick="change('+p.id+',\\'alive\\')">Equipo</button>';if(p.status==='dead')buttons='<small>☠️ Baja</small>';return '<div class="pokemon"><div><strong>'+escapeText(p.nick)+'</strong><br><small>'+escapeText(p.species)+' · Nv. '+escapeText(p.level)+' · '+escapeText(p.zone)+'</small>'+(p.type?'<br><small>'+escapeText(p.type)+'</small>':'')+'</div><div class="actions">'+buttons+'<button onclick="remove('+p.id+')">×</button></div></div>';}
+function escapeText(value){return String(value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];});}
+function render(){const selector=document.getElementById('runSelect');selector.innerHTML=runs.map(r=>'<option value="'+r.id+'">'+escapeText(r.name||r.game||'Aventura')+'</option>').join('');selector.value=data.id;document.getElementById('game').value=data.game||data.name||'';let alive=data.pokemon.filter(p=>p.status==='alive');document.getElementById('alive').textContent=alive.length;document.getElementById('dead').textContent=data.pokemon.filter(p=>p.status==='dead').length;document.getElementById('count').textContent=data.pokemon.length;document.getElementById('teamList').innerHTML=alive.length?alive.map(card).join(''):'<p>Aún no tienes Pokémon en tu equipo.</p>';document.getElementById('boxList').innerHTML=data.pokemon.filter(p=>p.status==='box').map(card).join('')||'<p>Tu caja está vacía.</p>';document.getElementById('graveList').innerHTML=data.pokemon.filter(p=>p.status==='dead').map(card).join('')||'<p>¡Ninguna baja todavía!</p>';document.getElementById('badges').innerHTML=data.badges.map((b,i)=>'<label><input type="checkbox" '+(b?'checked':'')+' onchange="data.badges['+i+']=this.checked;save()"> Medalla '+(i+1)+'</label>').join('');}
+document.getElementById('game').addEventListener('input',e=>{data.game=e.target.value;data.name=e.target.value;save();});
+function exportData(){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='mi-nuzlocke.json';a.click();URL.revokeObjectURL(a.href);}
+function importData(e){let file=e.target.files[0];if(!file)return;let reader=new FileReader();reader.onload=()=>{try{let d=JSON.parse(reader.result);if(!Array.isArray(d.pokemon)||!Array.isArray(d.badges))throw Error();d.id=data.id;d.name=d.name||d.game||'Aventura importada';data=d;save();alert('Partida importada correctamente');}catch(err){alert('Archivo no válido');}};reader.readAsText(file);}
+persistRuns();render();
 </script>
 </body>
 </html>
